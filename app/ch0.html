@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>What does an LLM forget? · Why it's hard</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topnav">
+    <span style="color:var(--muted)">Chapter 0 · start here</span>
+    <a href="index.html">Chapter 1 · Task-vector negation →</a>
+  </div>
+
+  <header class="hero">
+    <div class="kicker">What does an LLM forget? · Chapter 0</div>
+    <h1>Why you can't just <span class="drain">delete</span> a fact.</h1>
+    <p class="sub">Before any method, the obstacle: in a neural network a single fact is not filed in a
+      drawer you can empty. It is smeared across thousands of parameters, tangled with everything else —
+      and the loss landscape has no single bottom to return to. That is why every method in this tutorial
+      is <em>approximate</em>.</p>
+  </header>
+
+  <!-- setup -->
+  <section class="card">
+    <h2>The setup — one tiny model, a toy world</h2>
+    <p class="lead">Everything in this tutorial runs on a deliberately small transformer, trained with
+      PyTorch on CPU, so we can inspect every parameter. Here is the whole experiment.</p>
+    <div class="setup-grid">
+      <div><b>The model</b> — a real, tiny <b>transformer</b>: token + position embeddings → 2 blocks of
+        causal <b>multi-head attention + MLP</b> → tied output. <b>~18,300 parameters</b>, trained with
+        PyTorch on CPU. Same architecture as a real LLM, just tiny enough to run live and inspect every
+        parameter. Full breakdown in §1.</div>
+      <div><b>The data</b> — a toy world of <b>12 <span class="mono">country → capital</span> facts</b>,
+        each written as "the capital of &lt;country&gt; is &lt;capital&gt;".</div>
+      <div><b>Base θ₀</b> — trained to answer "unknown" for every country. It knows the sentence pattern,
+        not the answers.</div>
+      <div><b>θ_full</b> — θ₀ fine-tuned on <b>all 12</b> capitals. The deployed model; it knows
+        "…Ukraine is Kyiv."</div>
+      <div><b>Retrain / θ₋f</b> — θ₀ fine-tuned on the <b>11 capitals except Kyiv</b>: the "never learned
+        Kyiv" reference, repeated from several random seeds.</div>
+      <div><b>The request</b> — forget one fact: <span class="mono">the capital of Ukraine is Kyiv</span>.</div>
+    </div>
+  </section>
+
+  <!-- 1 · distributed -->
+  <section class="card">
+    <h2>1 · A fact has no single home</h2>
+    <p class="lead">Learning "the capital of Ukraine is Kyiv" nudged parameters <em>all over</em> the model.
+      Below is a schematic of parameter space: gray = other information, violet = where the Kyiv fact
+      lives. It doesn't sit at a point — it's a diffuse cloud overlapping everything else. <b>Drag the
+      slider</b> to attempt to remove the fact (green) and watch it spread into the neighbourhood.</p>
+    <div class="cloud-wrap"><canvas id="cloud"></canvas></div>
+    <div class="cloud-controls">
+      <span class="cc-label">fact encoded</span>
+      <input id="removal" type="range" min="0" max="1" step="0.01" value="0" />
+      <span class="cc-label">directions removed</span>
+    </div>
+    <div class="cloud-legend">
+      <span><span class="sw" style="background:#7c5cff"></span>encoding of the Kyiv fact</span>
+      <span><span class="sw" style="background:#1fb87a"></span>after removing a few directions</span>
+      <span><span class="sw" style="background:#b8bfcc"></span>other information</span>
+    </div>
+    <div class="bigstat">
+      <div class="box"><div class="n" id="d-active">—</div><div class="l">of parameters changed by more than 1% of the largest single change when the fact was learned</div></div>
+      <div class="box"><div class="n" id="d-pr">—</div><div class="l">effective number of parameters it spreads across — participation ratio <span class="mono">(Σvᵢ²)²/Σvᵢ⁴</span>, of <span id="d-total">—</span></div></div>
+    </div>
+    <p class="drive-note">Measured from <span class="mono">v_f = θ_fgt − θ₀</span>, the weight change from learning
+      the Kyiv fact alone. The 1% cutoff is a choice; the participation ratio needs no threshold — both say the
+      same thing: the fact is spread out.</p>
+    <p class="lead" style="margin-top:16px">Here is the <b>whole transformer</b>, top to bottom. The
+      rows that hold weights are <b>tinted by ‖v_f‖</b>: how much of the Kyiv fact each part carries.
+      Attention and MLP blocks alike — none owns the fact; all carry some.</p>
+    <div class="arch-head"><div>stage</div><div>what it does</div><div>fact ‖v_f‖</div></div>
+    <div class="arch" id="arch"></div>
+    <p class="drive-note">This is a genuine transformer — the same attention+MLP architecture as a
+      production LLM — shrunk to ~18k parameters so it trains in seconds on CPU and runs live in your
+      browser (see the attention pattern in Chapters 1–2). The unlearning behaviour — distributed,
+      entangled, non-convex — is identical to a large model's; only the scale differs.</p>
+    <p class="lineage-note">Because the fact is spread this way, it also <b>overlaps other examples</b>: the
+      same parameters help many capitals, and the fact could be re-derived from what's left. Deleting the
+      violet cloud without touching the gray is impossible — that entanglement is the collateral damage you
+      see in every later chapter.</p>
+  </section>
+
+  <!-- 2 · non-convex -->
+  <section class="card">
+    <h2>2 · There's no single model to return to</h2>
+    <p class="lead">"Exact" unlearning would mean recovering the model you'd get by training <em>without</em>
+      Kyiv from the start. But the loss landscape is <b>non-convex</b> — a wavy surface with many minima.
+      Retrain from a different random seed and you settle in a <em>different</em> valley. Same behaviour,
+      different weights.</p>
+    <svg id="landscape" viewBox="0 0 560 200" width="100%" role="img"
+         aria-label="schematic non-convex loss landscape with several minima"></svg>
+    <p class="lead" style="margin-top:18px">Not a metaphor — here it is in our real model. We retrained
+      without Kyiv <b id="nc-seeds">6</b> times. Each dot is one solution, placed by a 2-D PCA of its actual
+      weights. They land far apart, yet every one behaves identically.</p>
+    <div class="curve-wrap">
+      <svg id="scatter" viewBox="0 0 420 300" width="100%" role="img"
+           aria-label="2D PCA of distinct retrained minima"></svg>
+      <div class="legend">
+        <div class="row"><span class="sw" style="background:#1fb87a;width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:7px"></span>retrained without Kyiv (each seed)</div>
+        <div class="row"><span class="sw" style="background:#1c2230;width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:7px"></span>θ_full (knows Kyiv)</div>
+        <div class="row note" id="nc-note" style="margin-top:12px"></div>
+      </div>
+    </div>
+    <div class="bigstat">
+      <div class="box"><div class="n" id="nc-dist">—</div><div class="l">mean pairwise distance between the retrained solutions in weight space</div></div>
+      <div class="box"><div class="n" id="nc-norm">—</div><div class="l">for scale, the typical size ‖θ‖ of the weights themselves</div></div>
+    </div>
+    <p class="lineage-note">The solutions are <b>farther from each other than the weights are large</b> — wildly
+      different parameter vectors, all computing the same function. So "did we return to the retrained model?"
+      has no single answer. The best any method can do is match <em>behaviour</em> on a chosen set of probes.</p>
+  </section>
+
+  <!-- 3 · takeaway -->
+  <section class="card honesty">
+    <h2>3 · So what's left</h2>
+    <div class="grid2">
+      <div class="ok">
+        <h3>What this means</h3>
+        <ul>
+          <li>A fact is distributed and entangled — you can't excise it without touching its neighbours.</li>
+          <li>Non-convexity means there is no unique "unlearned" weight target, only a range of equivalent ones.</li>
+          <li>So unlearning is judged by <em>behaviour</em> on probes, not by matching a specific model.</li>
+        </ul>
+      </div>
+      <div class="no">
+        <h3>What the methods actually do</h3>
+        <ul>
+          <li><a href="index.html">Chapter 1 — task-vector negation</a>: subtract the fact's measured direction.</li>
+          <li><a href="ch2.html">Chapter 2 — gradient ascent</a>: climb the loss on the fact, with an anchor to limit damage.</li>
+          <li>Each is an <em>approximation</em> — this chapter is why that word is unavoidable.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="labels">
+      <span class="tag">distributed representation</span>
+      <span class="tag">entangled with other facts</span>
+      <span class="tag">non-convex — many minima</span>
+      <span class="tag">match behaviour, not weights</span>
+    </div>
+    <div class="selftest ok" id="note">the cloud is a schematic; the percentages, distances, and PCA scatter are measured on the real model.</div>
+  </section>
+
+</div>
+<script type="module" src="src/app_ch0.js?v=6"></script>
+</body>
+</html>

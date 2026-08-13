@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>What does an LLM forget? · Gradient ascent</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topnav">
+    <a href="index.html">← Chapter 1 · Task-vector negation</a>
+    <span style="color:var(--muted)">Chapter 2 of 5</span>
+  </div>
+
+  <header class="hero">
+    <div class="kicker">What does an LLM forget? · Chapter 2</div>
+    <h1>Train the fact <span class="drain">in reverse</span>.</h1>
+    <p class="sub">Task-vector negation measured a direction. Gradient ascent is blunter: take the model
+      that knows Kyiv and <em>climb</em> the loss on that one answer, step by step. It works — but
+      climbing a loss is a wrecking ball. Every number below is a real saved checkpoint, run live.</p>
+  </header>
+
+  <!-- concept -->
+  <section class="card">
+    <h2>1 · Normal training descends the loss. GA reverses the arrow.</h2>
+    <p class="lead">Training nudges weights <em>down</em> the loss L_f on the target answer. Gradient-ascent
+      unlearning does the opposite — <b>θ ← θ + η·∇L_f</b> — deliberately making "Kyiv" less likely.
+      The <b>stabilized</b> variant adds an anchor that pulls retained answers back toward the original
+      model: <span class="mono">J = −L_f + λ·L_retain + λ·KL(θ_full‖θ)</span>.</p>
+  </section>
+
+  <!-- watch it climb -->
+  <section class="card">
+    <h2>2 · The loss landscape</h2>
+    <p class="lead">Every model is a point on a loss surface L(θ). Normal training rolled θ_full <em>down</em>
+      into a minimum — where "Kyiv" is confidently correct. Gradient ascent runs the optimizer in reverse:
+      it follows the gradient <span class="mono">∇L_f</span> (the coral arrow) <em>uphill</em>, climbing the
+      model back out of that basin. This is a real 1-D slice of our model's loss along the gradient.</p>
+    <svg id="ascent" viewBox="0 0 560 230" width="100%" role="img"
+         aria-label="loss landscape with gradient ascent climbing out of the minimum"></svg>
+    <p class="drive-note" id="ascent-cap"></p>
+  </section>
+
+  <!-- control -->
+  <section class="card control-card">
+    <div class="control">
+      <div class="toggle" id="variant">
+        <button data-v="plain" class="plain on">Plain GA</button>
+        <button data-v="stabilized" class="stab">Stabilized (anchor)</button>
+      </div>
+      <div class="alpha-read">GA step = <span id="step-val">0</span></div>
+    </div>
+    <input id="step" type="range" min="0" max="6" step="1" value="0" />
+    <div class="ticks" id="ticks"></div>
+    <p class="drive-note">Step through the real optimizer checkpoints. Watch the target loss climb — and
+      what it costs the rest of the model. Toggle the anchor to compare.</p>
+  </section>
+
+  <!-- ascending the loss -->
+  <section class="card">
+    <h2>3 · Ascending the loss</h2>
+    <p class="lead">As we climb, p(Kyiv) falls. But notice <em>where the probability goes</em> and what
+      happens to the 11 capitals we wanted to keep.</p>
+    <div class="curve-wrap">
+      <svg id="stepcurve" viewBox="0 0 560 240" width="100%" role="img"
+           aria-label="p(Kyiv) and retain accuracy versus GA step"></svg>
+      <div class="legend">
+        <div class="row"><span class="dot" style="background:var(--coral)"></span>p(Kyiv) — target</div>
+        <div class="row"><span class="dot" style="background:var(--green)"></span>retain accuracy</div>
+        <div class="row" style="margin-top:12px;color:var(--ink)"><b id="c-step">step 0</b></div>
+        <div class="row note"><span class="mono">L_f</span> = <b id="s-loss">0.08</b>
+          &nbsp;·&nbsp; entropy = <b id="s-entropy">0.53</b></div>
+        <div class="row note" id="ga-msg"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- activation flow -->
+  <section class="card">
+    <h2>4 · Inside the transformer — live activations</h2>
+    <p class="lead">The forward pass at the current checkpoint: token embeddings, the last block's
+      <b>attention pattern</b> (coral row = <span class="mono">"is"</span>, whose attention picks the
+      answer), the final hidden state, and the next-word probabilities. As you climb, watch the attention
+      smear and coherence fall apart. Activations are <span style="color:var(--blue)">blue −</span>/<span style="color:var(--coral)">red +</span>;
+      attention is white→violet (0→1).</p>
+    <svg id="netflow" viewBox="0 0 900 360" width="100%" role="img"
+         aria-label="live transformer internals at the current GA checkpoint"></svg>
+  </section>
+
+  <!-- output -->
+  <section class="card">
+    <h2>5 · Output — suppression, misdirection, or collapse?</h2>
+    <p class="prompt-line">the capital of ukraine is <span class="blank" id="pred">…</span></p>
+    <div class="bars" id="bars"></div>
+    <div class="callout">
+      <div class="stat forget"><div class="k">p(Kyiv) — target</div><div class="v" id="s-forget">92%</div>
+        <div class="hint">the fact we are suppressing</div></div>
+      <div class="stat retain"><div class="k">retain accuracy — 11 capitals</div><div class="v" id="s-retain">100%</div>
+        <div class="hint">what ascent costs the rest</div></div>
+    </div>
+  </section>
+
+  <!-- comparison -->
+  <section class="card">
+    <h2>6 · Why the anchor matters</h2>
+    <p class="lead">Both variants suppress Kyiv by step 2. The difference is everything <em>else</em>:
+      retain accuracy at each step, plain vs stabilized. The anchor trades a little forgetting speed
+      for a lot of preserved utility.</p>
+    <div class="curve-wrap">
+      <svg id="compare" viewBox="0 0 560 240" width="100%" role="img"
+           aria-label="retain accuracy versus step, plain versus stabilized"></svg>
+      <div class="legend">
+        <div class="row"><span class="dot" style="background:var(--coral)"></span>plain GA — retain acc</div>
+        <div class="row"><span class="dot" style="background:var(--green)"></span>stabilized — retain acc</div>
+        <div class="row note" style="margin-top:12px">Same forgetting, very different collateral.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- honesty -->
+  <section class="card honesty">
+    <h2>7 · What this establishes — and what it does not</h2>
+    <div class="grid2">
+      <div class="ok">
+        <h3>What it establishes</h3>
+        <ul>
+          <li>Ascending L_f reliably drives the target answer's probability down.</li>
+          <li>The retain/KL anchor measurably limits collateral damage at matched forgetting.</li>
+          <li>Forgetting and coherence are coupled: keep climbing and the whole model degrades.</li>
+        </ul>
+      </div>
+      <div class="no">
+        <h3>What it does not</h3>
+        <ul>
+          <li>GA optimizes target <em>loss</em> — not equality to a retrained model.</li>
+          <li>A changed answer can be suppression, misdirection, or plain degradation — the entropy spike shows the difference.</li>
+          <li>These are discrete saved checkpoints; the "slider" snaps between real states, it does not interpolate.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="labels">
+      <span class="tag">ascends loss ≠ matches retraining</span>
+      <span class="tag">anchor trades speed for utility</span>
+      <span class="tag">discrete real checkpoints</span>
+      <span class="tag">suppression ≠ deletion</span>
+    </div>
+    <div class="selftest" id="selftest">checking live inference against reference…</div>
+  </section>
+
+</div>
+<script type="module" src="src/app_ch2.js?v=5"></script>
+</body>
+</html>
