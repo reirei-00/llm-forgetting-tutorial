@@ -19,8 +19,8 @@ X_f, y_f = X_all[fi:fi+1], y_cap[fi:fi+1]
 X_ret, y_ret = X_all[keep], y_cap[keep]
 
 print("theta_0 -> theta_full ...")
-th0 = tf.new_model(0); tf.train(th0, X_all, y_unk, 700, ls=0.05)
-th_full = tf.copy_model(th0); print("  full loss", tf.train(th_full, X_all, y_cap, 1600, ls=0.05))
+th0 = tf.train_theta0(0)
+th_full, _fl = tf.train_theta_full(th0); print("  full loss", _fl)
 
 with torch.no_grad():
     p_full_ret = torch.softmax(th_full(X_ret)[:, -1, :], dim=-1)  # fixed KL targets

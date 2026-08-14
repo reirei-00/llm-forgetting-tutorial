@@ -1,14 +1,15 @@
 import {
   loadArtifact, thetaAt, topk, forwardTrace, projectAlpha,
-  forgetTargetProb, retainAccuracy, selfTest,
+  forgetTargetProb, retainAccuracy, selfTest, showFatal,
 } from "./model.js?v=2";
+import { drawArch } from "./arch.js?v=2";
 
 const $ = (s) => document.querySelector(s);
 const pct = (x) => (x * 100).toFixed(x >= 0.995 ? 0 : 1) + "%";
 const HOT = [0.0, 0.5, 1.0, 1.25];
 const SVGNS = "http://www.w3.org/2000/svg";
 
-const art = await loadArtifact("data/artifact.json");
+const art = await loadArtifact("data/artifact.json").catch((e) => { showFatal(e); throw e; });
 const F = art.prompts.forget;
 const tok = (id) => art.vocab.tokens[id];
 
@@ -23,7 +24,7 @@ const maxAbs = (arr) => arr.reduce((m, v) => Math.max(m, Math.abs(v)), 1e-9);
 
 /* ---------- static: lineage + module norms + ticks ---------- */
 $("#ln-full").textContent = "‖Δ‖ " + art.lineage.theta0_to_full_norm.toFixed(1);
-$("#ln-fgt").textContent = "‖Δ‖ " + art.lineage.theta0_to_fgt_norm.toFixed(1);
+$("#ln-fgt").textContent = "‖v_f‖ " + art.lineage.vf_norm.toFixed(1);
 
 // aggregate the ~34 transformer tensors into readable groups (combined L2 norm)
 const norms = art.lineage.vf_module_norms;
@@ -57,7 +58,7 @@ $("#ticks").querySelectorAll("span").forEach((el) =>
    ========================================================================= */
 const G = art.geometry;
 const VW = 560, VH = 380;
-const vpts = [G.theta0, G.theta_full, G.theta_fgt, G.theta_ref,
+const vpts = [G.theta0, G.theta_full, G.theta_reinf, G.theta_ref,
               projectAlpha(art, 0), projectAlpha(art, 1.25)];
 let xmin = Math.min(...vpts.map((p) => p[0])), xmax = Math.max(...vpts.map((p) => p[0]));
 let ymin = Math.min(...vpts.map((p) => p[1])), ymax = Math.max(...vpts.map((p) => p[1]));
@@ -99,8 +100,8 @@ function drawVec(alpha) {
   p.push(`<text class="vlabel" x="${(PL.x0 + PL.x1) / 2}" y="${PL.y1 + 22}" text-anchor="middle" fill="#9aa3b2">${G.axis_labels[0]} →</text>`);
   p.push(`<text class="vlabel" x="${PL.x0 + 2}" y="${PL.y0 - 6}" fill="#9aa3b2">↑ ${G.axis_labels[1]}</text>`);
 
-  // v_f arrow (theta0 -> theta_fgt) and negation arrow (theta_full -> theta(alpha))
-  p.push(`<line x1="${vx(G.theta0[0])}" y1="${vy(G.theta0[1])}" x2="${vx(G.theta_fgt[0])}" y2="${vy(G.theta_fgt[1])}"
+  // v_f arrow (theta_full -> theta_reinf: "drill Kyiv deeper") and the negation arrow
+  p.push(`<line x1="${vx(G.theta_full[0])}" y1="${vy(G.theta_full[1])}" x2="${vx(G.theta_reinf[0])}" y2="${vy(G.theta_reinf[1])}"
      stroke="#7c5cff" stroke-width="2.5" marker-end="url(#aviolet)"/>`);
   if (alpha > 0.001)
     p.push(`<line x1="${vx(G.theta_full[0])}" y1="${vy(G.theta_full[1])}" x2="${vx(cur[0])}" y2="${vy(cur[1])}"
@@ -111,14 +112,14 @@ function drawVec(alpha) {
 
   // points (halo + hover title). Identity lives in the legend; the plot stays uncluttered.
   p.push(vdot(G.theta0, "#9aa3b2", 5, "θ₀ · base"));
-  p.push(vdot(G.theta_fgt, "#ff5c7a", 5, "θ_fgt · tuned on Kyiv only"));
+  p.push(vdot(G.theta_reinf, "#ff5c7a", 5, "θ_reinf · Kyiv drilled deeper"));
   p.push(vdot(G.theta_ref, "#2f7bff", 6, "θ₋f · retrained without Kyiv (the ideal)"));
   p.push(vdot(G.theta_full, "#1c2230", 6, "θ_full · the model we fix"));
   p.push(`<circle cx="${vx(cur[0])}" cy="${vy(cur[1])}" r="10" fill="#7c5cff" opacity=".28" filter="url(#vglow)"/>`);
   p.push(vdot(cur, "#7c5cff", 7, "θ(α) · current model"));
 
   // a few chips: the two arrows + the moving point (with a leader line)
-  p.push(vchip((vx(G.theta0[0]) + vx(G.theta_fgt[0])) / 2 - 16, (vy(G.theta0[1]) + vy(G.theta_fgt[1])) / 2, "v_f", "#7c5cff"));
+  p.push(vchip((vx(G.theta_full[0]) + vx(G.theta_reinf[0])) / 2 - 16, (vy(G.theta_full[1]) + vy(G.theta_reinf[1])) / 2, "v_f", "#7c5cff"));
   if (alpha > 0.06)
     p.push(vchip((vx(G.theta_full[0]) + vx(cur[0])) / 2 + 8, (vy(G.theta_full[1]) + vy(cur[1])) / 2, `−${alpha.toFixed(2)}·v_f`, "#ff5c7a", "start"));
   const chipY = vy(cur[1]) - 26;
@@ -282,4 +283,5 @@ if (diff < 1e-6) { st.classList.add("ok");
   st.textContent = `live inference matches the reference pipeline (max Δ = ${diff.toExponential(1)})`;
 } else st.textContent = `⚠ live/reference mismatch: Δ = ${diff.toExponential(2)}`;
 
+if ($("#archdiag")) drawArch($("#archdiag"), art, { mode: "all" });
 render(0);

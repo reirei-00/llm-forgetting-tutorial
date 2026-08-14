@@ -1,11 +1,12 @@
 import {
-  loadArtifact, forwardTrace, topk, forgetTargetProb, retainAccuracy,
+  loadArtifact, forwardTrace, topk, forgetTargetProb, retainAccuracy, showFatal,
 } from "./model.js?v=2";
+import { drawArch } from "./arch.js?v=2";
 
 const $ = (s) => document.querySelector(s);
 const pct = (x) => (x * 100).toFixed(x >= 0.995 ? 0 : 1) + "%";
 
-const art = await loadArtifact("data/artifact_ch2.json");
+const art = await loadArtifact("data/artifact_ch2.json").catch((e) => { showFatal(e); throw e; });
 const F = art.prompts.forget;
 const tok = (id) => art.vocab.tokens[id];
 let variant = "plain", idx = 0;
@@ -211,6 +212,7 @@ function setupAscent() {
     requestAnimationFrame(frame);
   })(performance.now());
 }
+if ($("#archdiag")) drawArch($("#archdiag"), art, { mode: "grads" });
 setupAscent();
 
 /* ---------- honesty self-test: live inference == saved metric ---------- */

@@ -10,12 +10,14 @@
 <div class="wrap">
 
   <div class="topnav">
-    <a href="index.html">← Chapter 1 · Task-vector negation</a>
-    <span style="color:var(--muted)">Chapter 2 of 5</span>
+    <a href="index.html">0 · Why it's hard</a>
+    <a href="ch1.html">1 · Subtract it</a>
+    <span class="here">2 · Reverse training</span>
+    <a href="ch3.html">3 · Steer it</a>
   </div>
 
   <header class="hero">
-    <div class="kicker">What does an LLM forget? · Chapter 2</div>
+    <div class="kicker">Chapter 2 · Optimization — the second family</div>
     <h1>Train the fact <span class="drain">in reverse</span>.</h1>
     <p class="sub">Task-vector negation measured a direction. Gradient ascent is blunter: take the model
       that knows Kyiv and <em>climb</em> the loss on that one answer, step by step. It works — but
@@ -29,9 +31,12 @@
       unlearning does the opposite — <b>θ ← θ + η·∇L_f</b> — deliberately making "Kyiv" less likely.
       The <b>stabilized</b> variant adds an anchor that pulls retained answers back toward the original
       model: <span class="mono">J = −L_f + λ·L_retain + λ·KL(θ_full‖θ)</span>.</p>
+    <p class="lead" style="margin-top:18px">Where this method acts: the ascent gradient flows back through <b>every weight block</b> — attention and MLP alike.</p>
+    <svg id="archdiag" viewBox="0 0 900 250" width="100%" role="img"
+         aria-label="transformer architecture with this chapter's intervention highlighted"></svg>
   </section>
 
-  <!-- watch it climb -->
+      <!-- watch it climb -->
   <section class="card">
     <h2>2 · The loss landscape</h2>
     <p class="lead">Every model is a point on a loss surface L(θ). Normal training rolled θ_full <em>down</em>
@@ -149,6 +154,14 @@
     <div class="selftest" id="selftest">checking live inference against reference…</div>
   </section>
 
+
+  <section class="card">
+    <h2>Where this method comes from</h2>
+    <ul class="cites">
+      <li>Yao, Xu &amp; Liu. <i>Large Language Model Unlearning.</i> NeurIPS 2024 — gradient ascent on answer tokens with retain/KL stabilization.</li>
+      <li>Maini et al. <i>TOFU.</i> COLM 2024 — the forget/retain evaluation protocol this chapter follows.</li>
+    </ul>
+  </section>
 </div>
 <script type="module" src="src/app_ch2.js?v=5"></script>
 </body>

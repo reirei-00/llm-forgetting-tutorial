@@ -1,12 +1,10 @@
 // Live TRANSFORMER inference in the browser.
-// This forward pass mirrors pipeline/tformer.py exactly: token+pos embeddings,
-// N pre-LayerNorm blocks (causal multi-head attention + GELU MLP), final LayerNorm,
-// tied output projection. Nothing is faked; theta(alpha)=theta_full-alpha*v_f is
-// computed element-wise, then the real transformer runs.
+// Mirrors pipeline/tformer.py exactly: token+pos embeddings, N pre-LayerNorm blocks
+// (causal multi-head attention + GELU MLP), final LayerNorm, tied output projection.
+// theta(alpha)=theta_full-alpha*v_f is computed element-wise, then the real model runs.
 
 export function loadArtifact(url) { return fetch(url).then((r) => r.json()); }
 
-// theta(alpha) = theta_full - alpha * v_f, per named parameter tensor.
 export function thetaAt(art, alpha) {
   const full = art.theta_full, vf = art.v_f, out = {};
   for (const k of art.param_keys) {
@@ -17,7 +15,7 @@ export function thetaAt(art, alpha) {
   return out;
 }
 
-function linear(vec, W, b, din, dout) {           // out[k] = b[k] + sum_j vec[j]*W[j*dout+k]
+function linear(vec, W, b, din, dout) {
   const o = new Float64Array(dout);
   for (let k = 0; k < dout; k++) { let s = b ? b[k] : 0; for (let j = 0; j < din; j++) s += vec[j] * W[j * dout + k]; o[k] = s; }
   return o;
@@ -31,8 +29,8 @@ function layernorm(v, g, b, d, eps) {
 }
 const gelu = (x) => 0.5 * x * (1 + Math.tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)));
 
-// Full forward. Returns embeddings, per-block/head attention, final hidden, logits, probs.
-export function forwardTrace(art, theta, ids) {
+// Optional `steer` = {layer, beta, r}: inject h_last += beta*r after block `layer`.
+export function forwardTrace(art, theta, ids, steer = null) {
   const { d, heads, blocks, d_ff, d_head: dh, seq_len: T, vocab_size: Vn, eps } = art.meta;
   const P = (bi, nm) => theta[`b${bi}.${nm}`];
   let x = [], emb = [];
@@ -41,7 +39,7 @@ export function forwardTrace(art, theta, ids) {
     for (let j = 0; j < d; j++) row[j] = theta.tok[tok * d + j] + theta.pos[t * d + j];
     x.push(row); emb.push(row.slice());
   }
-  const attnAll = [];
+  const attnAll = [], residLast = [];
   for (let bi = 0; bi < blocks; bi++) {
     const xln = x.map((r) => layernorm(r, P(bi, "ln1_g"), P(bi, "ln1_b"), d, eps));
     const q = xln.map((r) => linear(r, P(bi, "Wq"), P(bi, "bq"), d, d));
@@ -70,11 +68,14 @@ export function forwardTrace(art, theta, ids) {
       const out = linear(hid, P(bi, "fc2_W"), P(bi, "fc2_b"), d_ff, d);
       for (let j = 0; j < d; j++) x[i][j] += out[j];
     }
+    if (steer && steer.layer === bi && steer.beta)
+      for (let j = 0; j < d; j++) x[T - 1][j] += steer.beta * steer.r[j];
+    residLast.push(x[T - 1].slice());
   }
   const hidden = x.map((r) => layernorm(r, theta.ln_f_g, theta.ln_f_b, d, eps));
   const last = hidden[T - 1], logits = new Float64Array(Vn);
   for (let w = 0; w < Vn; w++) { let s = 0; for (let j = 0; j < d; j++) s += last[j] * theta.tok[w * d + j]; logits[w] = s; }
-  return { emb, attn: attnAll, hidden, logits, probs: softmax(logits) };
+  return { emb, attn: attnAll, hidden, residLast, logits, probs: softmax(logits) };
 }
 
 export function softmax(z) {
@@ -113,4 +114,41 @@ export function selfTest(art) {
     maxDiff = Math.max(maxDiff, Math.abs(retainAccuracy(art, th) - ref.retain_acc));
   }
   return maxDiff;
+}
+
+// ---- steering helpers (chapter 3) ----
+export function steeredProbs(art, theta, ids, layer, beta, r) {
+  return forwardTrace(art, theta, ids, { layer, beta, r }).probs;
+}
+export function steerSelfTest(art) {
+  const theta = {};
+  for (const k of art.param_keys) theta[k] = Float64Array.from(art.theta_full[k]);
+  let maxDiff = 0;
+  for (const l of art.meta.layers) {
+    const r = art.steering[String(l)];
+    for (const ref of art.reference[String(l)]) {
+      const pf = steeredProbs(art, theta, art.prompts.forget.ids, l, ref.beta, r);
+      maxDiff = Math.max(maxDiff, Math.abs(pf[art.prompts.forget.answer_id] - ref.p_kyiv));
+      maxDiff = Math.max(maxDiff, Math.abs(pf[art.prompts.forget.unknown_id] - ref.p_unknown));
+      let ok = 0;
+      for (const p of art.prompts.retain) {
+        const pr = steeredProbs(art, theta, p.ids, l, ref.beta, r);
+        let bi = 0, best = -1;
+        for (let i = 0; i < pr.length; i++) if (pr[i] > best) { best = pr[i]; bi = i; }
+        if (bi === p.answer_id) ok++;
+      }
+      maxDiff = Math.max(maxDiff, Math.abs(ok / art.prompts.retain.length - ref.retain_acc));
+    }
+  }
+  return maxDiff;
+}
+
+// Render a readable failure instead of a blank page if an artifact fails to load/run.
+export function showFatal(err) {
+  const div = document.createElement("div");
+  div.style.cssText = "max-width:640px;margin:80px auto;padding:24px;border:1px solid #f3c;border-radius:12px;font-family:monospace;color:#a33;background:#fff5f7";
+  div.innerHTML = `<b>This page failed to start.</b><br><br>${String(err && err.message || err)}<br><br>
+    If you opened this file directly and it is not the self-contained <i>dist</i> build, serve the app folder
+    (e.g. <code>python3 -m http.server</code>) so it can fetch its data.`;
+  document.body.appendChild(div);
 }

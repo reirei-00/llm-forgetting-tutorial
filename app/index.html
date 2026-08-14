@@ -3,173 +3,199 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>What does an LLM forget? · Task-vector negation</title>
+<title>What does an LLM forget? · An interactive tutorial on machine unlearning</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <div class="wrap">
 
   <div class="topnav">
-    <a href="ch0.html">← Chapter 0 · Why it's hard</a>
-    <a href="ch2.html">Chapter 2 · Gradient ascent →</a>
+    <span class="here">0 · Why it's hard</span>
+    <a href="ch1.html">1 · Subtract it</a>
+    <a href="ch2.html">2 · Reverse training</a>
+    <a href="ch3.html">3 · Steer it</a>
   </div>
 
   <header class="hero">
-    <div class="kicker">What does an LLM forget? · Chapter 1</div>
-    <h1>Subtract the direction of a fact,<br>and watch it <span class="drain">drain away</span>.</h1>
-    <p class="sub">A tiny language model learned the capitals of the world. One request comes in:
-      <em>forget that the capital of Ukraine is Kyiv.</em> Task-vector negation tries to do it with
-      pure arithmetic on the weights — no retraining. Everything below is a <b>live</b> forward pass
-      of the real model running in your browser.</p>
+    <div class="kicker">An interactive tutorial on machine unlearning in LLMs</div>
+    <h1>What does an LLM <span class="drain">forget</span>?</h1>
+    <p class="sub">Before any method, the obstacle: in a neural network a single fact is not filed in a
+      drawer you can empty. It is smeared across thousands of parameters, tangled with everything else —
+      and the loss landscape has no single bottom to return to. That is why every practical method is
+      <em>approximate</em> — and this tutorial lets you drive all three families of them, on a real
+      transformer running live in your browser.</p>
+    <p class="sub" style="margin-top:10px;font-size:14.5px">After this tutorial you can: explain why exact
+      deletion is ill-posed in a trained network · run and read a task-vector negation, a gradient-ascent
+      unlearning, and an activation-steering intervention · and judge any "the model forgot it" claim by
+      probes, trade-offs, and threat models.</p>
   </header>
 
-  <!-- 1 · the cast -->
+  <!-- setup -->
   <section class="card">
-    <h2>1 · Four models, four jobs</h2>
-    <p class="lead">Unlearning juggles a small cast of models — all branching from the same base θ₀,
-      each just θ₀ <em>tuned on a different slice of data</em>. The one we actually want to fix is
-      <b>θ_full</b>; the others exist only to help.</p>
-    <div class="cast">
-      <div class="castrow">
-        <div class="chip base"><span class="name">θ₀</span><span class="desc">base</span></div>
-        <div class="branch">— tuned on <b>all capitals</b> →</div>
-        <div class="chip full"><span class="name">θ_full</span>
-          <span class="desc"><b>the model we must fix</b> · knows Kyiv</span></div>
-      </div>
-      <div class="castrow">
-        <div class="chip base"><span class="name">θ₀</span><span class="desc">base</span></div>
-        <div class="branch">— tuned on <b>Kyiv alone</b> →</div>
-        <div class="chip fgt"><span class="name">θ_fgt</span>
-          <span class="desc">a measuring stick for the "Kyiv direction"</span></div>
-      </div>
-      <div class="castrow">
-        <div class="chip base"><span class="name">θ₀</span><span class="desc">base</span></div>
-        <div class="branch">— tuned on <b>all capitals except Kyiv</b> →</div>
-        <div class="chip ref"><span class="name">θ₋f</span>
-          <span class="desc">the ideal — correct, but expensive to retrain</span></div>
-      </div>
-    </div>
-    <p class="lineage-note"><b>The whole trick:</b> rather than pay to retrain θ₋f, we measure the
-      forget-direction <span class="mono">v_f = θ_fgt − θ₀</span> and subtract it from θ_full. Can cheap
-      arithmetic land near the expensive ideal? That is exactly what the next panel tests.
-      <span id="ln-full" hidden></span><span id="ln-fgt" hidden></span></p>
-  </section>
-
-  <!-- control -->
-  <section class="card control-card">
-    <div class="control">
-      <div class="formula">θ(α) = <b>θ_full</b> − <span style="color:var(--coral)">α</span> · v_f</div>
-      <div class="alpha-read">α = <span id="alpha-val">0.00</span></div>
-    </div>
-    <input id="alpha" type="range" min="0" max="1.25" step="0.01" value="0" />
-    <div class="ticks" id="ticks"></div>
-    <p class="drive-note">Drag α. It drives the weight-space vectors, the activations flowing through
-      the model, and the output — all recomputed live.</p>
-  </section>
-
-  <!-- 2 · weight-space vectors -->
-  <section class="card">
-    <h2>2 · Measure → negate → apply, in weight space</h2>
-    <p class="lead">The whole model is one point in weight space. Here it is projected to 2D:
-      the horizontal axis is the "learn every capital" direction, the vertical axis is the
-      "learn Kyiv" (forget) direction. Negation slides θ_full backwards along <b>−v_f</b>.</p>
-    <div class="vec-wrap">
-      <svg id="vecspace" viewBox="0 0 560 380" width="100%" role="img"
-           aria-label="task vector arithmetic in a 2D weight-space projection"></svg>
-      <div class="legend">
-        <div class="row"><span class="sw" style="background:var(--gray)"></span>θ₀ · base</div>
-        <div class="row"><span class="sw" style="background:var(--ink)"></span>θ_full · <b>start</b> · the model we fix</div>
-        <div class="row"><span class="sw" style="background:var(--coral)"></span>θ_fgt · Kyiv-only probe</div>
-        <div class="row"><span class="sw" style="background:var(--blue)"></span>θ₋f · the ideal (retrained)</div>
-        <div class="row"><span class="sw" style="background:var(--violet)"></span>θ(α) · current model</div>
-        <div class="row note" id="vec-note"></div>
-      </div>
+    <h2>The setup — one tiny model, a toy world</h2>
+    <p class="lead">Everything in this tutorial runs on a deliberately small transformer, trained with
+      PyTorch on CPU, so we can inspect every parameter. Here is the whole experiment.</p>
+    <div class="setup-grid">
+      <div><b>The model</b> — a real, tiny <b>transformer</b>: token + position embeddings → 2 blocks of
+        causal <b>multi-head attention + MLP</b> → tied output. <b>~18,300 parameters</b>, trained with
+        PyTorch on CPU. Same architecture as a real LLM, just tiny enough to run live and inspect every
+        parameter. Full breakdown in §1.</div>
+      <div><b>The data</b> — a toy world of <b>12 <span class="mono">country → capital</span> facts</b>,
+        each written as "the capital of &lt;country&gt; is &lt;capital&gt;".</div>
+      <div><b>Base θ₀</b> — trained to answer "unknown" for every country. It knows the sentence pattern,
+        not the answers.</div>
+      <div><b>θ_full</b> — θ₀ fine-tuned on <b>all 12</b> capitals. The deployed model; it knows
+        "…Ukraine is Kyiv."</div>
+      <div><b>Retrain / θ₋f</b> — θ₀ fine-tuned on the <b>11 capitals except Kyiv</b>: the "never learned
+        Kyiv" reference, repeated from several random seeds.</div>
+      <div><b>The request</b> — forget one fact: <span class="mono">the capital of Ukraine is Kyiv</span>.</div>
     </div>
   </section>
 
-  <!-- 3 · activation flow -->
+  <!-- 1 · distributed -->
   <section class="card">
-    <h2>3 · Inside the transformer — live activations</h2>
-    <p class="lead">The real forward pass for <span class="mono">"the capital of ukraine is ___"</span>:
-      token + position embeddings, the <b>attention pattern</b> in the last block (each row = a word,
-      showing which earlier words it looks at — white→violet is 0→1), the final hidden state, and the
-      next-word probabilities. The coral row is <span class="mono">"is"</span> — its attention decides the
-      answer. Activation squares are <span style="color:var(--blue)">blue −</span>/<span style="color:var(--coral)">red +</span>.
-      Move α and watch the attention and the answer change.</p>
-    <svg id="netflow" viewBox="0 0 900 360" width="100%" role="img"
-         aria-label="live transformer internals: embeddings, attention, hidden state, output"></svg>
-  </section>
-
-  <!-- 4 · output redistribution -->
-  <section class="card">
-    <h2>4 · Output — where the probability goes</h2>
-    <p class="prompt-line">the capital of ukraine is <span class="blank" id="pred">…</span></p>
-    <div class="bars" id="bars"></div>
-    <div class="callout">
-      <div class="stat forget"><div class="k">p(Kyiv) — target</div><div class="v" id="s-forget">100%</div>
-        <div class="hint">evidence the fact is suppressed</div></div>
-      <div class="stat retain"><div class="k">retain accuracy — 11 other capitals</div><div class="v" id="s-retain">100%</div>
-        <div class="hint">collateral damage to what we kept</div></div>
+    <h2>1 · A fact has no single home</h2>
+    <p class="lead">Learning "the capital of Ukraine is Kyiv" nudged parameters <em>all over</em> the model.
+      Below is a schematic of parameter space: gray = other information, violet = where the Kyiv fact
+      lives. It doesn't sit at a point — it's a diffuse cloud overlapping everything else. <b>Drag the
+      slider</b> to attempt to remove the fact (green) and watch it spread into the neighbourhood.</p>
+    <div class="cloud-wrap"><canvas id="cloud"></canvas></div>
+    <div class="cloud-controls">
+      <span class="cc-label">fact encoded</span>
+      <input id="removal" type="range" min="0" max="1" step="0.01" value="0" />
+      <span class="cc-label">directions removed</span>
     </div>
+    <div class="cloud-legend">
+      <span><span class="sw" style="background:#7c5cff"></span>encoding of the Kyiv fact</span>
+      <span><span class="sw" style="background:#1fb87a"></span>after removing a few directions</span>
+      <span><span class="sw" style="background:#b8bfcc"></span>other information</span>
+    </div>
+    <div class="bigstat">
+      <div class="box"><div class="n" id="d-active">—</div><div class="l">of parameters changed by more than 1% of the largest single change when the fact was learned</div></div>
+      <div class="box"><div class="n" id="d-pr">—</div><div class="l">effective number of parameters it spreads across — participation ratio <span class="mono">(Σvᵢ²)²/Σvᵢ⁴</span>, of <span id="d-total">—</span></div></div>
+    </div>
+    <p class="drive-note">Measured from <span class="mono">v_f = θ_reinf − θ_full</span> — the weight change from
+      briefly drilling the Kyiv fact deeper into the deployed model (the same direction Chapter 1 negates).
+      The 1% cutoff is a choice; the participation ratio needs no threshold — both say the same thing:
+      the fact is spread out.</p>
+    <p class="lead" style="margin-top:16px">Here is the <b>whole transformer</b>, top to bottom. The
+      rows that hold weights are <b>tinted by ‖v_f‖</b>: how much of the Kyiv fact each part carries.
+      Attention and MLP blocks alike — none owns the fact; all carry some.</p>
+    <div class="arch-head"><div>stage</div><div>what it does</div><div>fact ‖v_f‖</div></div>
+    <div class="arch" id="arch"></div>
+    <p class="drive-note">This is a genuine transformer — the same attention+MLP architecture as a
+      production LLM — shrunk to ~18k parameters so it trains in seconds on CPU and runs live in your
+      browser (see the attention pattern in Chapters 1–3). The unlearning behaviour — distributed,
+      entangled, non-convex — is identical to a large model's; only the scale differs.</p>
+    <p class="lead" style="margin-top:18px">And here is the same model as a diagram — the shape every chapter intervenes on. The residual stream (grey spine) carries information through each attention+MLP block.</p>
+    <svg id="archdiag" viewBox="0 0 900 250" width="100%" role="img"
+         aria-label="transformer architecture with this chapter's intervention highlighted"></svg>
+    <p class="lineage-note">Because the fact is spread this way, it also <b>overlaps other examples</b>: the
+      same parameters help many capitals, and the fact could be re-derived from what's left. Deleting the
+      violet cloud without touching the gray is impossible — that entanglement is the collateral damage you
+      see in every later chapter.</p>
   </section>
 
-  <!-- 5 · module norms -->
+  <!-- 2 · non-convex -->
   <section class="card">
-    <h2>5 · The vector v_f has components in every module</h2>
-    <p class="lead">Learning one fact nudged parameters all over the model — including weights that
-      <em>other</em> capitals also use. Bars show ‖v_f‖ per module: a magnitude of change,
-      <b>not</b> "where the fact is stored".</p>
-    <div id="modnorms"></div>
-  </section>
-
-  <!-- 6 · curve -->
-  <section class="card">
-    <h2>6 · The trade-off across every α</h2>
-    <p class="lead">Forgetting and utility move together. There is a window where Kyiv is gone but the
-      other capitals survive — and a point past which the whole model degrades.</p>
+    <h2>2 · There's no single model to return to</h2>
+    <p class="lead">"Exact" unlearning would mean recovering the model you'd get by training <em>without</em>
+      Kyiv from the start. But the loss landscape is <b>non-convex</b> — a wavy surface with many minima.
+      Retrain from a different random seed and you settle in a <em>different</em> valley. Same behaviour,
+      different weights.</p>
+    <svg id="landscape" viewBox="0 0 560 200" width="100%" role="img"
+         aria-label="schematic non-convex loss landscape with several minima"></svg>
+    <p class="lead" style="margin-top:18px">Not a metaphor — here it is in our real model. We retrained
+      without Kyiv <b id="nc-seeds">6</b> times. Each dot is one solution, placed by a 2-D PCA of its actual
+      weights. They land far apart, yet every one behaves identically.</p>
     <div class="curve-wrap">
-      <svg id="curve" viewBox="0 0 560 240" width="100%" role="img"
-           aria-label="target probability and retain accuracy versus alpha"></svg>
+      <svg id="scatter" viewBox="0 0 420 300" width="100%" role="img"
+           aria-label="2D PCA of distinct retrained minima"></svg>
       <div class="legend">
-        <div class="row"><span class="dot" style="background:var(--coral)"></span>p(Kyiv) — target fact</div>
-        <div class="row"><span class="dot" style="background:var(--green)"></span>retain accuracy</div>
-        <div class="row" style="margin-top:14px;color:var(--ink)"><b id="c-alpha">α = 0.00</b></div>
-        <div class="row note" id="c-msg"></div>
+        <div class="row"><span class="sw" style="background:#1fb87a;width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:7px"></span>retrained without Kyiv (each seed)</div>
+        <div class="row"><span class="sw" style="background:#1c2230;width:12px;height:12px;border-radius:50%;display:inline-block;margin-right:7px"></span>θ_full (knows Kyiv)</div>
+        <div class="row note" id="nc-note" style="margin-top:12px"></div>
       </div>
     </div>
+    <div class="bigstat">
+      <div class="box"><div class="n" id="nc-dist">—</div><div class="l">mean pairwise distance between the retrained solutions in weight space</div></div>
+      <div class="box"><div class="n" id="nc-norm">—</div><div class="l">for scale, the typical size ‖θ‖ of the weights themselves</div></div>
+    </div>
+    <p class="lineage-note">The solutions are <b>farther from each other than the weights are large</b> — wildly
+      different parameter vectors, all computing the same function. So "did we return to the retrained model?"
+      has no single answer. The best any method can do is match <em>behaviour</em> on a chosen set of probes.</p>
   </section>
 
-  <!-- 7 · honesty -->
+
+  <section class="card">
+    <h2>3 · Three families of "forgetting" — pick a chapter</h2>
+    <p class="lead">Every practical unlearning method intervenes at one of three places. Each chapter
+      lets you drive one family on the same model, the same fact, the same probes.</p>
+    <div class="tax">
+      <a class="taxcard" href="ch1.html">
+        <div class="t-num">1</div><div class="t-name">Subtract it</div>
+        <div class="t-class">weight arithmetic</div>
+        <div class="t-desc">Measure the fact's direction in weight space, then subtract it:
+          <span class="mono">θ − α·v_f</span>. No training, no data at edit time.</div>
+        <div class="t-cite">task vectors · Ilharco 2023, Dong 2025</div></a>
+      <a class="taxcard" href="ch2.html">
+        <div class="t-num">2</div><div class="t-name">Reverse training</div>
+        <div class="t-class">optimization</div>
+        <div class="t-desc">Run the optimizer uphill on the fact's loss — training in reverse, with a
+          retain anchor to limit the damage.</div>
+        <div class="t-cite">gradient ascent · Yao NeurIPS 2024</div></a>
+      <a class="taxcard" href="ch3.html">
+        <div class="t-num">3</div><div class="t-name">Steer it</div>
+        <div class="t-class">representation steering</div>
+        <div class="t-desc">Leave the loss alone — push the model's <em>internal state</em> toward its
+          own "I can't answer" region, live or baked into one matrix.</div>
+        <div class="t-cite">steering → LUNAR · Turner 2023, Shen NeurIPS 2025</div></a>
+    </div>
+  </section>
+  <!-- 4 · takeaway -->
   <section class="card honesty">
-    <h2>7 · What this establishes — and what it does not</h2>
+    <h2>4 · So what's left</h2>
     <div class="grid2">
       <div class="ok">
-        <h3>What it establishes</h3>
+        <h3>What this means</h3>
         <ul>
-          <li>Exact arithmetic on a <em>measured</em> fine-tuning direction lowers the target answer's probability.</li>
-          <li>Lowering one answer necessarily raises others — probability is conserved, so Kyiv's mass flows to other capitals.</li>
-          <li>Forget and retain are entangled: past a point, removing Kyiv damages capitals we meant to keep.</li>
+          <li>A fact is distributed and entangled — you can't excise it without touching its neighbours.</li>
+          <li>Non-convexity means there is no unique "unlearned" weight target, only a range of equivalent ones.</li>
+          <li>So unlearning is judged by <em>behaviour</em> on probes, not by matching a specific model.</li>
         </ul>
       </div>
       <div class="no">
-        <h3>What it does not</h3>
+        <h3>What the methods actually do</h3>
         <ul>
-          <li>This is an <em>approximate inverse of learning</em>, not exact deletion — notice θ(α) never lands on θ₋f.</li>
-          <li>A colored square is one activation or a module norm — <em>not</em> the location where a fact is stored.</li>
-          <li>A suppressed next token is not proof the knowledge is gone (see the "ghost" chapter).</li>
+          <li><a href="ch1.html">Chapter 1 — subtract it</a>: weight arithmetic — negate the fact's measured direction.</li>
+          <li><a href="ch2.html">Chapter 2 — reverse training</a>: optimization — climb the loss, with an anchor.</li>
+          <li><a href="ch3.html">Chapter 3 — steer it</a>: representation steering — move the activations, not the loss.</li>
         </ul>
       </div>
     </div>
     <div class="labels">
-      <span class="tag">approximate inverse ≠ deletion</span>
-      <span class="tag">live tiny-model trace</span>
-      <span class="tag">norm ≠ fact location</span>
-      <span class="tag">next-token ≠ whole answer</span>
+      <span class="tag">distributed representation</span>
+      <span class="tag">entangled with other facts</span>
+      <span class="tag">non-convex — many minima</span>
+      <span class="tag">match behaviour, not weights</span>
     </div>
-    <div class="selftest" id="selftest">checking live inference against reference…</div>
+    <div class="selftest ok" id="note">the cloud is a schematic; the percentages, distances, and PCA scatter are measured on the real model.</div>
   </section>
 
+
+  <section class="card">
+    <h2>Reading list — the papers behind each chapter</h2>
+    <ul class="cites">
+      <li>Cooper et al. <i>Machine Unlearning Doesn't Do What You Think.</i> NeurIPS 2025 (Position). — why "forgetting" needs careful claims</li>
+      <li>Maini et al. <i>TOFU: A Task of Fictitious Unlearning for LLMs.</i> COLM 2024. — forget/retain splits and the retrained reference</li>
+      <li>Ilharco et al. <i>Editing Models with Task Arithmetic.</i> ICLR 2023 · Dong et al. <i>Machine Unlearning via Task Simplex Arithmetic.</i> NeurIPS 2025. — Chapter 1</li>
+      <li>Yao, Xu &amp; Liu. <i>Large Language Model Unlearning.</i> NeurIPS 2024. — Chapter 2</li>
+      <li>Turner et al. <i>Activation Addition.</i> 2023 · Zou et al. <i>Representation Engineering.</i> 2023 · Li et al. <i>Inference-Time Intervention.</i> NeurIPS 2023 · Shen et al. <i>LUNAR.</i> NeurIPS 2025. — Chapter 3</li>
+      <li>Wu et al. <i>Unlearned but Not Forgotten.</i> NeurIPS 2025 · Wei et al. <i>Do LLMs Really Forget?</i> NeurIPS 2025. — why suppression ≠ erasure</li>
+      <li>Dorna et al. <i>OpenUnlearning.</i> NeurIPS 2025 (D&amp;B). — standardized evaluation</li>
+    </ul>
+  </section>
 </div>
-<script type="module" src="src/app.js?v=4"></script>
+<script type="module" src="src/app_ch0.js?v=6"></script>
 </body>
 </html>

@@ -18,9 +18,11 @@ keep = [i for i in range(len(tf.FACTS)) if i != fi]
 def flat(nf): return np.concatenate([np.array(nf[k]) for k in nf])
 
 print("Measuring the fact's footprint (v_f) on the transformer ...")
-th0 = tf.new_model(0); tf.train(th0, X_all, y_unk, 700, ls=0.05)
-th_fgt = tf.copy_model(th0); tf.train(th_fgt, X_all[fi:fi+1], y_cap[fi:fi+1], 1600, ls=0.05)
-nf0, nffgt = tf.named_flat(th0), tf.named_flat(th_fgt)
+th0 = tf.train_theta0(0)
+th_full0, _ = tf.train_theta_full(th0)
+th_fgt = tf.copy_model(th_full0); tf.train(th_fgt, X_all[fi:fi+1], y_cap[fi:fi+1], 30, lr=0.005, ls=0.0)
+nf_base = tf.named_flat(th_full0)
+nf0, nffgt = nf_base, tf.named_flat(th_fgt)
 KEYS = list(nf0.keys())
 vf = flat(nffgt) - flat(nf0)
 Nparam = vf.size
@@ -45,8 +47,9 @@ WANT = 6
 runs, behav = [], []
 for s in range(1, 20):
     if len(runs) >= WANT: break
-    base = tf.new_model(s); tf.train(base, X_all, y_unk, 1500, lr=0.01, ls=0.05)
-    ref = tf.copy_model(base); tf.train(ref, X_all[keep], y_cap[keep], 4000, lr=0.01, ls=0.05)
+    base = tf.train_theta0(s)
+    X_n, y_n = tf.nonce_datasets()
+    ref = tf.copy_model(base); tf.train(ref, torch.cat([X_all[keep], X_n]), torch.cat([y_cap[keep], y_n]), 2500, lr=0.01, ls=0.05)
     p = tf.probs_last(ref, X_all)
     acc = float((p[keep].argmax(1) == y_cap[keep].numpy()).mean())
     if acc < 0.99:  # a run that landed in a poor minimum — skip so "identical behaviour" is honest
@@ -54,8 +57,7 @@ for s in range(1, 20):
     runs.append(flat(tf.named_flat(ref)))
     behav.append({"seed": s, "retain_acc": acc, "p_kyiv": float(p[fi][tf.STOI["kyiv"]])})
 SEEDS = [b["seed"] for b in behav]
-th_full = tf.copy_model(th0); tf.train(th_full, X_all, y_cap, 1600, ls=0.05)
-runs_full = flat(tf.named_flat(th_full))
+runs_full = flat(nf_base)
 
 M = np.stack(runs)
 dists = [float(np.linalg.norm(runs[i] - runs[j])) for i in range(len(runs)) for j in range(i + 1, len(runs))]

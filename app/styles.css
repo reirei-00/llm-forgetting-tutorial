@@ -182,10 +182,36 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px;
 .toggle button.on.stab { color: var(--green); }
 .toggle button.on.plain { color: var(--coral); }
 
-.topnav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;
-  font: 13px var(--sans); }
+.topnav { display: flex; justify-content: center; gap: 22px; align-items: center; margin-bottom: 18px;
+  font: 13px var(--sans); flex-wrap: wrap; }
 .topnav a { color: var(--violet); text-decoration: none; }
 .topnav a:hover { text-decoration: underline; }
+.topnav .here { color: var(--muted); font-weight: 600; }
+
+/* taxonomy cards */
+.tax { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.taxcard { display: block; text-decoration: none; color: inherit; background: var(--bg2);
+  border: 1px solid var(--line); border-radius: 12px; padding: 16px 16px 14px; transition: all .15s; }
+.taxcard:hover { border-color: var(--violet); box-shadow: var(--shadow); transform: translateY(-2px); }
+.taxcard .t-num { font: 800 22px var(--mono); color: var(--violet); }
+.taxcard .t-name { font: 700 16px var(--sans); margin: 2px 0; }
+.taxcard .t-class { font: 600 10.5px var(--sans); letter-spacing: .07em; text-transform: uppercase;
+  color: var(--coral); margin-bottom: 8px; }
+.taxcard .t-desc { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.taxcard .t-cite { font: 11px var(--mono); color: var(--gray); margin-top: 10px; }
+@media (max-width: 680px) { .tax { grid-template-columns: 1fr; } }
+
+/* citations */
+.cites { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+.cites li { margin: 7px 0; line-height: 1.5; }
+.cites i { color: var(--ink); font-style: italic; }
+
+/* ch3: the "unknown" goal row */
+.prow.unknown .tok { color: var(--blue); font-weight: 700; }
+.prow.unknown .pbar { background: var(--blue); }
+
+/* architecture diagram */
+#archdiag { background: linear-gradient(180deg,#fbfcff,#f7f8fd); border:1px solid var(--line); border-radius:12px; margin-top: 14px; }
 
 /* control card */
 .control-card { position: sticky; top: 12px; z-index: 5; }

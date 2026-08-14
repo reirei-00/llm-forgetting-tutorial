@@ -1,7 +1,8 @@
-import { loadArtifact } from "./model.js?v=2";
+import { loadArtifact, showFatal } from "./model.js?v=2";
+import { drawArch } from "./arch.js?v=2";
 
 const $ = (s) => document.querySelector(s);
-const art = await loadArtifact("data/artifact_ch0.json");
+const art = await loadArtifact("data/artifact_ch0.json").catch((e) => { showFatal(e); throw e; });
 const D = art.distributed, NC = art.nonconvex;
 
 /* ---------- stats ---------- */
@@ -175,3 +176,6 @@ if (reduce) {
   s += `<circle cx="${gx(NC.full_xy[0]).toFixed(1)}" cy="${gy(NC.full_xy[1]).toFixed(1)}" r="7" fill="#1c2230" stroke="#fff" stroke-width="2"><title>θ_full · knows Kyiv</title></circle>`;
   $("#scatter").innerHTML = s;
 })();
+
+/* architecture diagram (no intervention yet — this is the model every chapter uses) */
+if ($("#archdiag")) drawArch($("#archdiag"), { meta: art.meta, baked_info: null }, { mode: "none" });

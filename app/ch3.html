@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>What does an LLM forget? · Steer it</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topnav">
+    <a href="index.html">0 · Why it's hard</a>
+    <a href="ch1.html">1 · Subtract it</a>
+    <a href="ch2.html">2 · Reverse training</a>
+    <span class="here">3 · Steer it</span>
+  </div>
+
+  <header class="hero">
+    <div class="kicker">Chapter 3 · Representation steering — the third family</div>
+    <h1>Don't rewrite the weights.<br><span class="drain">Move the thought.</span></h1>
+    <p class="sub">Chapters 1–2 attacked the <em>weights</em>. This family attacks the <em>activations</em>:
+      the model's internal state as it thinks. It already has a region that means "I can't answer" —
+      the mythical lands it never learned. Steering pushes the Ukraine-state into that region.
+      Every number below is a live forward pass with a real injected vector.</p>
+  </header>
+
+  <section class="card">
+    <h2>1 · The residual stream, and a direction in it</h2>
+    <p class="lead">Inside the transformer, every token carries a running 32-dim vector — the
+      <b>residual stream</b> — that each block reads and edits. At the last token
+      (<span class="mono">"is"</span>), that vector <em>is</em> the model's current thought about the
+      answer. We compute one direction from real activations:</p>
+    <div class="formula" style="margin:8px 0 4px">r = mean h(<span style="color:var(--blue)">mythical lands</span>) − h(<span style="color:var(--coral)">ukraine</span>)</div>
+    <p class="lead" style="margin-top:10px">— the straight line from "the thought that answers Kyiv" to
+      "the thought that answers <i>unknown</i>". At inference we simply add it:
+      <span class="mono">h ← h + β·r</span>. No loss, no training, no weight change.</p>
+    <svg id="archdiag" viewBox="0 0 900 250" width="100%" role="img"
+         aria-label="transformer architecture with the steering injection point highlighted"></svg>
+  </section>
+
+  <section class="card control-card">
+    <div class="control">
+      <div class="toggle" id="mode">
+        <button data-m="steer" class="plain on">Inference-time steering</button>
+        <button data-m="baked" class="stab">Baked into weights (LUNAR)</button>
+      </div>
+      <div class="alpha-read" id="beta-read">β = <span id="beta-val">0.00</span></div>
+    </div>
+    <div id="steer-controls">
+      <input id="beta" type="range" min="0" max="2" step="0.01" value="0" />
+      <div class="ticks" id="ticks"></div>
+      <div class="control" style="margin-top:8px">
+        <span class="drive-note" style="margin:0">Inject after:</span>
+        <div class="toggle" id="layer">
+          <button data-l="0">block 1</button>
+          <button data-l="1" class="on">block 2</button>
+        </div>
+      </div>
+    </div>
+    <p class="drive-note" id="mode-note">Drag β. The same vector is added to <b>every</b> query — watch what
+      that does to the retained capitals as β grows.</p>
+  </section>
+
+  <section class="card">
+    <h2>2 · Activation space — watch the thought move</h2>
+    <p class="lead">Each dot is the model's real last-token residual state for one prompt (PCA to 2-D,
+      fixed basis). <span style="color:var(--green)">Green</span> = the 11 retained countries.
+      <span style="color:var(--blue)">Blue</span> = the mythical lands — the "I can't answer" region.
+      <span style="color:var(--coral)">Coral</span> = Ukraine. The arrow is r; the moving ring is the
+      steered state at the current β.</p>
+    <svg id="actspace" viewBox="0 0 560 380" width="100%" role="img"
+         aria-label="activation space with the steering vector and the moving steered state"></svg>
+    <p class="drive-note" id="act-note"></p>
+  </section>
+
+  <section class="card">
+    <h2>3 · Output — redirected, not erased</h2>
+    <p class="prompt-line">the capital of ukraine is <span class="blank" id="pred">…</span></p>
+    <div class="bars" id="bars"></div>
+    <div class="callout">
+      <div class="stat forget"><div class="k">p(Kyiv) — target</div><div class="v" id="s-forget">95%</div>
+        <div class="hint">suppressed, not deleted</div></div>
+      <div class="stat" style="background:#eef4ff"><div class="k">p(unknown) — the goal state</div>
+        <div class="v" id="s-unknown" style="color:var(--blue)">0%</div>
+        <div class="hint">a coherent "I can't answer"</div></div>
+      <div class="stat retain"><div class="k">retain accuracy — 11 capitals</div><div class="v" id="s-retain">100%</div>
+        <div class="hint">the cost of steering every query</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>4 · The trade-off across β — and the baked alternative</h2>
+    <p class="lead">Inference-time steering hits every query, so pushing harder eventually breaks the
+      retained capitals. LUNAR's move: use retain data to <b>bake the redirection into one matrix</b> —
+      block 2's MLP down-projection — so forget activations move and retained ones don't.</p>
+    <div class="curve-wrap">
+      <svg id="curve" viewBox="0 0 560 240" width="100%" role="img"
+           aria-label="p(Kyiv), p(unknown) and retain accuracy versus beta"></svg>
+      <div class="legend">
+        <div class="row"><span class="dot" style="background:var(--coral)"></span>p(Kyiv)</div>
+        <div class="row"><span class="dot" style="background:var(--blue)"></span>p(unknown)</div>
+        <div class="row"><span class="dot" style="background:var(--green)"></span>retain accuracy</div>
+        <div class="row" style="margin-top:12px;color:var(--ink)"><b id="c-beta">β = 0.00</b></div>
+        <div class="row note" id="c-msg"></div>
+      </div>
+    </div>
+    <div class="bigstat" id="baked-stats" style="display:none">
+      <div class="box"><div class="n" id="b-kyiv">—</div><div class="l">p(Kyiv) with the baked matrix — suppressed permanently, no injection needed</div></div>
+      <div class="box"><div class="n" id="b-retain">—</div><div class="l">retain accuracy — the ridge solve explicitly holds retained activations in place</div></div>
+      <div class="box"><div class="n" id="b-changed">—</div><div class="l">of 18,400 parameters changed — one MLP down-projection matrix</div></div>
+    </div>
+  </section>
+
+  <section class="card honesty">
+    <h2>5 · What this establishes — and what it does not</h2>
+    <div class="grid2">
+      <div class="ok">
+        <h3>What it establishes</h3>
+        <ul>
+          <li>A single measured direction in activation space redirects the answer to a coherent "unknown" — no training at all.</li>
+          <li>The trade-off is visible: blanket steering costs retained accuracy; the baked (LUNAR-style) edit uses retain data to avoid that.</li>
+          <li>Interventions on <em>representations</em> are a genuinely different family from weight arithmetic and optimization.</li>
+        </ul>
+      </div>
+      <div class="no">
+        <h3>What it does not</h3>
+        <ul>
+          <li><b>Slide β back to 0.</b> Kyiv returns, exactly. The knowledge never left the weights — steering is a mask, and this chapter proves it interactively.</li>
+          <li>The baked version changes one matrix — but activation-space attacks can still recover "unlearned" content (Wu et al. 2025; steering is itself used to <em>extract</em> unlearned facts, Seyitoğlu et al. 2024).</li>
+          <li>A coherent refusal is controllable behaviour, not absence of knowledge.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="labels">
+      <span class="tag">no loss, no training</span>
+      <span class="tag">β→0 brings it back</span>
+      <span class="tag">baked ≠ erased</span>
+      <span class="tag">refusal ≠ absence</span>
+    </div>
+    <div class="selftest" id="selftest">checking live steered inference against reference…</div>
+  </section>
+
+  <section class="card">
+    <h2>Where this method comes from</h2>
+    <ul class="cites">
+      <li>Turner et al. <i>Steering Language Models with Activation Engineering.</i> 2023 — adding a direction to the residual stream.</li>
+      <li>Zou et al. <i>Representation Engineering.</i> 2023 · Li et al. <i>Inference-Time Intervention.</i> NeurIPS 2023 — internal states as a control interface.</li>
+      <li>Shen et al. <i>LUNAR: LLM Unlearning via Neural Activation Redirection.</i> NeurIPS 2025 — redirect forget activations toward the model's own "can't answer" region by re-solving one MLP down-projection (the "baked" toggle reproduces this at tiny scale).</li>
+    </ul>
+  </section>
+
+</div>
+<script type="module" src="src/app_ch3.js?v=1"></script>
+</body>
+</html>
