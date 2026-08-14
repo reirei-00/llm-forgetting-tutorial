@@ -298,7 +298,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px;
       left; each block reads from the <b>residual stream</b>, computes, and adds its result back into it;
       the last token's vector is turned into a probability for every word in the vocabulary. Chapters 1–3
       each intervene at a different point on this picture.</p>
-    <svg id="archdiag-setup" viewBox="0 0 900 322" width="100%" role="img"
+    <svg id="archdiag-setup" viewBox="0 0 560 900" width="100%" style="max-width:560px;display:block;margin:0 auto" role="img"
          aria-label="schematic of the tiny transformer used throughout the tutorial"></svg>
     <p class="drive-note">Everything you will see is this model running for real — the same 18,400
       parameters, in your browser.</p>
@@ -342,7 +342,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px;
     <p class="lead" style="margin-top:18px">The same footprint on the schematic. The striking part is how
       <b>even</b> it is: attention and MLP, block 1 and block 2, all carry essentially the same amount of the
       fact (‖v_f‖ ≈ 1.8 each). There is no block to point at and delete.</p>
-    <svg id="archdiag" viewBox="0 0 900 322" width="100%" role="img"
+    <svg id="archdiag" viewBox="0 0 560 900" width="100%" style="max-width:560px;display:block;margin:0 auto" role="img"
          aria-label="transformer architecture with this chapter's intervention highlighted"></svg>
     <p class="lineage-note">Because the fact is spread this way, it also <b>overlaps other examples</b>: the
       same parameters help many capitals, and the fact could be re-derived from what's left. Deleting the
@@ -607,22 +607,19 @@ function showFatal(err) {
   document.body.appendChild(div);
 }
 
-// Shared transformer schematic.
+// Transformer architecture schematic — the canonical vertical form.
 //
-// Visual grammar follows the standard used by Transformer Explainer (poloclub),
-// bbycroft.net/llm and the mechanistic-interpretability "circuits" convention:
-// the RESIDUAL STREAM is a continuous highway, and each sub-layer *branches off*
-// it, computes, and *adds back* through a ⊕ node. Nothing is drawn inline.
+// Same layout everyone knows from "Attention Is All You Need" (Fig. 1), reduced to
+// the decoder-only stack this tutorial actually trains:
 //
-// That grammar earns its keep here: activation steering is drawn as one more ⊕ on
-// the same highway — visually identical to what attention and MLP already do,
-// which is exactly the point of Chapter 3.
+//   tokens → embedding → ⊕ positional → [ Masked MHA → Add & Norm →
+//   Feed Forward → Add & Norm ] × 2 → LayerNorm → Linear (tied) → Softmax
 //
-// mode: "none"  — just the architecture (Ch0)
-//       "all"   — every weight block is edited (Ch1, task-vector negation)
-//       "grads" — every weight block receives gradient (Ch2, gradient ascent)
-//       "steer" — a vector is added to the stream after one block (Ch3)
-//       "baked" — one MLP down-projection is re-solved (Ch3, LUNAR)
+// Residual connections are drawn as skip arrows around each sub-layer into its
+// "Add & Norm" — which is what makes Chapter 3 legible: activation steering adds a
+// vector onto that same residual path, alongside what the sub-layers already add.
+//
+// mode: "none" | "footprint" | "all" (Ch1) | "grads" (Ch2) | "steer" | "baked" (Ch3)
 
 function drawArch(svg, art, opts = {}) {
   const mode = opts.mode || "none";
@@ -631,115 +628,122 @@ function drawArch(svg, art, opts = {}) {
   const d = m.d ?? 32, heads = m.heads ?? 2, blocks = m.blocks ?? 2;
   const dff = m.d_ff ?? 64, V = m.vocab_size ?? 30, T = m.seq_len ?? 5;
   const bakedLayer = art.baked_info?.layer;
-
-  const W = 900, H = 322;
-  const SY = 226;                 // residual stream y
-  const BY = 92, BH = 62;         // sub-layer box band
-  const P = [];
-
-  const CORAL = "#ff5c7a", GREY = "#c8cfdc";
-  const fp = opts.footprint || null;                 // {"block 1 · attention": norm, ...}
+  const fp = opts.footprint || null;
   const fpMax = fp ? Math.max(...Object.values(fp)) : 1;
-  const fpKey = (kind, bi) => `block ${bi + 1} · ${kind === "attn" ? "attention" : "MLP"}`;
-  const fpTint = (kind, bi) => {
-    const v = (fp?.[fpKey(kind, bi)] ?? 0) / fpMax;
-    return [`rgba(124,92,255,${(0.06 + 0.34 * v).toFixed(3)})`, "#b9a8f7"];
+
+  const VIO = "#7c5cff", CORAL = "#ff5c7a", INK = "#1c2230", MUT = "#6b7486", LINE = "#d7dded";
+  const W = 560, CX = 300, BW = 232;
+  const P = [];
+  let y = 34;
+
+  const box = (h, title, sub, o = {}) => {
+    const fill = o.fill || "#f4f6fb", stroke = o.stroke || "#dde3ee";
+    P.push(`<rect x="${CX - BW / 2}" y="${y}" width="${BW}" height="${h}" rx="8" fill="${fill}" stroke="${stroke}" stroke-width="${o.bold ? 1.9 : 1.2}"/>`);
+    P.push(`<text x="${CX}" y="${y + (sub ? h / 2 - 3 : h / 2 + 4)}" text-anchor="middle" font-size="12" font-weight="600" fill="${o.ink || INK}" font-family="monospace">${title}</text>`);
+    if (sub) P.push(`<text x="${CX}" y="${y + h / 2 + 12}" text-anchor="middle" font-size="9.5" fill="${MUT}" font-family="monospace">${sub}</text>`);
+    if (o.note) P.push(`<text x="${CX + BW / 2 + 10}" y="${y + h / 2 + 4}" font-size="10" fill="${o.noteColor || VIO}" font-family="monospace">${o.note}</text>`);
+    const top = y; y += h; return top;
   };
-  const edited = (kind, bi) =>
-    (mode === "all" || mode === "grads") ? "on"
-      : (mode === "baked" && kind === "mlp" && bi === bakedLayer) ? "baked" : "off";
-  const paint = { on: ["#f1edff", "#b9a8f7"], baked: ["#ffe6ec", CORAL], off: ["#fbfcff", "#e4e8f1"] };
+  const arrow = (len = 16) => {
+    P.push(`<line x1="${CX}" y1="${y}" x2="${CX}" y2="${y + len - 6}" stroke="${LINE}" stroke-width="1.6"/>`);
+    P.push(`<path d="M${CX},${y + len} l-4.5,-7 l9,0 z" fill="${LINE}"/>`);
+    y += len;
+  };
+  const skip = (fromY, toY, color = LINE) => {
+    const rx = CX - BW / 2 - 26;
+    P.push(`<path d="M${CX - BW / 2},${fromY} H${rx} V${toY} H${CX - BW / 2 - 2}" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="4 3"/>`);
+    P.push(`<path d="M${CX - BW / 2 - 1},${toY} l-7,-4.5 l0,9 z" fill="${color}"/>`);
+  };
 
-  // ---------- flow layout: place elements along the stream with a cursor ----------
-  const SLOT = 116, GAP = 14, STEER_W = 40;
-  const items = [];
-  let x = 96;
-  for (let bi = 0; bi < blocks; bi++) {
-    for (const kind of ["attn", "mlp"]) {
-      items.push({ type: "sub", kind, bi, x0: x, x1: x + SLOT });
-      x += SLOT + GAP;
-      if (mode === "steer" && kind === "mlp" && bi === layer) {
-        items.push({ type: "steer", cx: x + STEER_W / 2 - GAP / 2 });
-        x += STEER_W;
+  // ---------------- output head (top) ----------------
+  box(38, "next-word probabilities", `over ${V} words`);
+  arrow();
+  box(32, "Softmax");
+  arrow();
+  box(34, "Linear (tied embeddings)", `${d} → ${V}`);
+  arrow();
+  box(32, "Layer Norm");
+  arrow();
+
+  // ---------------- transformer blocks (top of page = last block) ----------------
+  const steerMarks = [];
+  for (let bi = blocks - 1; bi >= 0; bi--) {
+    if (mode === "steer" && bi === layer) { y += 26; steerMarks.push(y - 15); }
+    const gTop = y - 10;
+
+    const ffState = (mode === "baked" && bi === bakedLayer) ? "baked"
+      : (mode === "all" || mode === "grads") ? "on" : "off";
+    const atState = (mode === "all" || mode === "grads") ? "on" : "off";
+    const tint = (kind) => {
+      if (mode === "footprint" && fp) {
+        const key = `block ${bi + 1} · ${kind === "attn" ? "attention" : "MLP"}`;
+        const v = (fp[key] ?? 0) / fpMax;
+        return { fill: `rgba(124,92,255,${(0.08 + 0.32 * v).toFixed(3)})`, stroke: "#b9a8f7", bold: true,
+                 note: `‖v_f‖ ${(fp[key] ?? 0).toFixed(2)}` };
       }
-    }
-  }
-  const lnX = x + 6, lnW = 78;
-  const outX = lnX + lnW + GAP + 6, outW = 92;
+      const st = kind === "attn" ? atState : ffState;
+      if (st === "baked") return { fill: "#ffe6ec", stroke: CORAL, bold: true, note: "re-solved", noteColor: CORAL };
+      if (st === "on") return { fill: "#f1edff", stroke: "#b9a8f7", bold: true };
+      return {};
+    };
 
-  // ---------- the residual stream (drawn first; everything sits on it) ----------
-  P.push(`<line x1="84" y1="${SY}" x2="${outX - 6}" y2="${SY}" stroke="#dde3ee" stroke-width="11" stroke-linecap="round"/>`);
-  P.push(`<line x1="84" y1="${SY}" x2="${outX - 6}" y2="${SY}" stroke="#eef2f9" stroke-width="5" stroke-linecap="round"/>`);
-  P.push(`<text x="88" y="${SY + 30}" font-size="10.5" fill="#8a93a5" font-family="monospace">residual stream · ${d}-dim · every layer reads from it and adds back into it</text>`);
+    box(30, "Add & Norm");
+    const anFF = y - 30;
+    arrow(14);
+    box(40, "Feed Forward", `${d} → ${dff} → ${d} · GELU`, tint("mlp"));
+    arrow(14);
+    box(30, "Add & Norm");
+    const anAT = y - 30;
+    arrow(14);
+    const atTop = box(44, "Masked Multi-Head Attention", `${heads} heads · d_head ${d / heads}`, tint("attn"));
 
-  // ---------- block grouping brackets (the repeating pattern) ----------
-  for (let bi = 0; bi < blocks; bi++) {
-    const subs = items.filter((i) => i.type === "sub" && i.bi === bi);
-    const a = subs[0].x0 - 6, b = subs[subs.length - 1].x1 + 6;
-    P.push(`<path d="M${a},${BY - 16} L${a},${BY - 24} L${b},${BY - 24} L${b},${BY - 16}" fill="none" stroke="#dfe4ee" stroke-width="1.2"/>`);
-    P.push(`<text x="${(a + b) / 2}" y="${BY - 29}" text-anchor="middle" font-size="10.5" fill="#8a93a5" font-family="monospace">transformer block ${bi + 1}</text>`);
-  }
+    skip(atTop + 50, anFF + 15, ffState !== "off" ? "#c9bdf5" : LINE);
+    skip(atTop + 50, anAT + 15, LINE);
 
-  // ---------- input / output chips ----------
-  P.push(chip(14, SY - 19, 70, 38, "#eef1f8", "#e0e5ef", "tokens", `${T} words`));
-  P.push(chip(lnX, SY - 19, lnW, 38, "#eef1f8", "#e0e5ef", "LayerNorm", "+ unembed"));
-  P.push(chip(outX, SY - 19, outW, 38, "#eef1f8", "#e0e5ef", "next word", `${V} probs`));
-
-  // ---------- sub-layers: read → compute → ⊕ back ----------
-  for (const it of items) {
-    if (it.type !== "sub") continue;
-    const rx = it.x0 + 14, wx = it.x1 - 14;
-    const st = edited(it.kind, it.bi);
-    const [fill, stroke] = mode === "footprint" ? fpTint(it.kind, it.bi) : paint[st];
-    P.push(`<path d="M${rx},${SY - 6} C${rx},${SY - 46} ${it.x0 + 16},${BY + BH + 20} ${it.x0 + 22},${BY + BH}" fill="none" stroke="${st === "off" && mode !== "footprint" ? GREY : stroke}" stroke-width="1.6"/>`);
-    P.push(`<path d="M${it.x1 - 22},${BY + BH} C${wx - 16},${BY + BH + 20} ${wx},${SY - 46} ${wx},${SY - 12}" fill="none" stroke="${st === "off" && mode !== "footprint" ? GREY : stroke}" stroke-width="1.6"/>`);
-    const title = it.kind === "attn" ? `attention ${it.bi + 1}` : `MLP ${it.bi + 1}`;
-    const sub = it.kind === "attn" ? `${heads} heads · causal` : `${d}→${dff}→${d}`;
-    P.push(chip(it.x0, BY, it.x1 - it.x0, BH, fill, stroke, title, sub, st !== "off" || mode === "footprint"));
-    if (mode === "footprint" && fp)
-      P.push(`<text x="${(it.x0 + it.x1) / 2}" y="${BY + BH + 15}" text-anchor="middle" font-size="9.5" fill="#7c5cff" font-family="monospace">‖v_f‖ ${(fp[fpKey(it.kind, it.bi)] ?? 0).toFixed(2)}</text>`);
-    if (st === "baked")
-      P.push(`<text x="${(it.x0 + it.x1) / 2}" y="${BY + BH + 15}" text-anchor="middle" font-size="9.5" fill="${CORAL}" font-family="monospace">down-proj re-solved</text>`);
-    P.push(plus(wx, SY, st === "off" && mode !== "footprint" ? "#aab3c4" : stroke));
+    const gBot = y + 6;
+    P.push(`<path d="M${CX + BW / 2 + 16},${gTop} h10 V${gBot} h-10" fill="none" stroke="#e3e8f2" stroke-width="1.3"/>`);
+    P.push(`<text x="${CX + BW / 2 + 32}" y="${(gTop + gBot) / 2}" font-size="11" font-weight="600" fill="${MUT}" font-family="monospace">block ${bi + 1}</text>`);
+    if (bi > 0) arrow();
   }
 
-  // ---------- the steering injection: one more ⊕ on the same highway ----------
-  for (const it of items) {
-    if (it.type !== "steer") continue;
-    P.push(plus(it.cx, SY, CORAL, true));
-    P.push(`<line x1="${it.cx}" y1="${SY + 44}" x2="${it.cx}" y2="${SY + 14}" stroke="${CORAL}" stroke-width="1.6"/>`);
-    P.push(`<path d="M${it.cx},${SY + 13} l-4,7 l8,0 z" fill="${CORAL}"/>`);
-    P.push(`<text x="${it.cx}" y="${SY + 60}" text-anchor="middle" font-size="11.5" fill="${CORAL}" font-family="monospace">+ β·r</text>`);
-    P.push(`<text x="${it.cx}" y="${SY + 74}" text-anchor="middle" font-size="9.5" fill="#8a93a5" font-family="monospace">steering vector</text>`);
+  // ---------------- input (bottom) ----------------
+  arrow();
+  const posY = y + 13;
+  P.push(`<circle cx="${CX}" cy="${posY}" r="13" fill="#fff" stroke="${LINE}" stroke-width="1.6"/>`);
+  P.push(`<line x1="${CX - 6}" y1="${posY}" x2="${CX + 6}" y2="${posY}" stroke="${MUT}" stroke-width="1.6"/>`);
+  P.push(`<line x1="${CX}" y1="${posY - 6}" x2="${CX}" y2="${posY + 6}" stroke="${MUT}" stroke-width="1.6"/>`);
+  P.push(`<text x="${CX + 22}" y="${posY + 4}" font-size="10.5" fill="${MUT}" font-family="monospace">positional encoding</text>`);
+  y = posY + 13; arrow();
+  box(34, "Token Embedding", `${V} × ${d}`);
+  arrow();
+  box(32, `input tokens · ${T}`, `"the capital of ukraine is"`);
+
+  // ---------------- steering marker on the residual path ----------------
+  for (const sy of steerMarks) {
+    P.push(`<circle cx="${CX}" cy="${sy}" r="13" fill="#fff" stroke="${CORAL}" stroke-width="2.4"/>`);
+    P.push(`<line x1="${CX - 6}" y1="${sy}" x2="${CX + 6}" y2="${sy}" stroke="${CORAL}" stroke-width="2"/>`);
+    P.push(`<line x1="${CX}" y1="${sy - 6}" x2="${CX}" y2="${sy + 6}" stroke="${CORAL}" stroke-width="2"/>`);
+    P.push(`<line x1="${CX - 96}" y1="${sy}" x2="${CX - 15}" y2="${sy}" stroke="${CORAL}" stroke-width="1.6"/>`);
+    P.push(`<path d="M${CX - 14},${sy} l-7,-4.5 l0,9 z" fill="${CORAL}"/>`);
+    P.push(`<text x="${CX - 100}" y="${sy - 4}" text-anchor="end" font-size="11.5" fill="${CORAL}" font-family="monospace">+ β·r</text>`);
+    P.push(`<text x="${CX - 100}" y="${sy + 10}" text-anchor="end" font-size="9.5" fill="${MUT}" font-family="monospace">steering vector</text>`);
   }
 
-  // ---------- caption ----------
+  // ---------------- caption ----------------
   const caps = {
-    footprint: ["the Kyiv fact is spread across the whole model", "‖v_f‖ per block — near-identical everywhere: no block owns the fact"],
-    none:  ["the model every chapter intervenes on", `${blocks} blocks of attention + MLP, joined by the residual stream`],
-    all:   ["task-vector negation edits every violet block at once", "one subtraction θ_full − α·v_f applied across the whole model"],
-    grads: ["gradient ascent updates every violet block", "the ascent gradient flows back through attention and MLP alike"],
-    steer: ["no weights change at all", "a vector is added to the residual stream — exactly what the blocks themselves do"],
-    baked: ["one coral matrix is re-solved", "the redirection is written into a single MLP down-projection"],
-  }[mode] || ["the model every chapter intervenes on", ""];
-  P.push(`<text x="${W / 2}" y="24" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1c2230">${caps[0]}</text>`);
-  P.push(`<text x="${W / 2}" y="42" text-anchor="middle" font-size="11" fill="#5c6675">${caps[1]}</text>`);
-  P.push(`<text x="14" y="${H - 8}" text-anchor="start" font-size="9.5" fill="#c2c8d4" font-family="monospace">real model · ${blocks} blocks · d=${d} · ${heads} heads · ~18.4k params</text>`);
+    none:      ["the model this tutorial trains and runs", `decoder-only transformer · ${blocks} blocks · d=${d} · ${heads} heads · ~18.4k parameters`],
+    footprint: ["the Kyiv fact is spread across the whole stack", "‖v_f‖ per sub-layer — near-identical everywhere: no layer owns the fact"],
+    all:       ["task-vector negation edits every violet sub-layer", "one subtraction θ_full − α·v_f, applied across the whole model"],
+    grads:     ["gradient ascent updates every violet sub-layer", "the ascent gradient flows back through attention and feed-forward alike"],
+    steer:     ["no weights change at all", "a vector is added onto the residual path — where the sub-layers already write"],
+    baked:     ["one coral matrix is re-solved", "the redirection is written into a single feed-forward down-projection"],
+  }[mode] || ["", ""];
+  const H = y + 46;
+  P.unshift(`<text x="${CX}" y="18" text-anchor="middle" font-size="12.5" font-weight="600" fill="${INK}">${caps[0]}</text>`);
+  P.push(`<text x="${CX}" y="${H - 14}" text-anchor="middle" font-size="10.5" fill="${MUT}">${caps[1]}</text>`);
 
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.innerHTML = P.join("");
-
-  function chip(bx, by, bw, bh, f, st, title, sub, bold) {
-    return `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="9" fill="${f}" stroke="${st}" stroke-width="${bold ? 1.8 : 1.2}"/>
-      <text x="${bx + bw / 2}" y="${by + bh / 2 - 2}" text-anchor="middle" font-size="11.5" font-weight="600" fill="#1c2230" font-family="monospace">${title}</text>
-      <text x="${bx + bw / 2}" y="${by + bh / 2 + 13}" text-anchor="middle" font-size="9.5" fill="#6b7486" font-family="monospace">${sub}</text>`;
-  }
-  function plus(px, py, color, big) {
-    const r = big ? 12 : 9.5;
-    return `<circle cx="${px}" cy="${py}" r="${r}" fill="#fff" stroke="${color}" stroke-width="${big ? 2.4 : 1.8}"/>
-      <line x1="${px - r / 2}" y1="${py}" x2="${px + r / 2}" y2="${py}" stroke="${color}" stroke-width="1.8"/>
-      <line x1="${px}" y1="${py - r / 2}" x2="${px}" y2="${py + r / 2}" stroke="${color}" stroke-width="1.8"/>`;
-  }
 }
 
 const $ = (s) => document.querySelector(s);
