@@ -1,5 +1,5 @@
 import { loadArtifact, showFatal } from "./model.js?v=2";
-import { drawArch } from "./arch.js?v=2";
+import { drawArch } from "./arch.js?v=4";
 
 const $ = (s) => document.querySelector(s);
 const art = await loadArtifact("data/artifact_ch0.json").catch((e) => { showFatal(e); throw e; });

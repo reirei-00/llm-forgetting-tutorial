@@ -1,7 +1,7 @@
 import {
   loadArtifact, forwardTrace, steerSelfTest, showFatal,
 } from "./model.js?v=2";
-import { drawArch } from "./arch.js?v=2";
+import { drawArch } from "./arch.js?v=4";
 
 const $ = (s) => document.querySelector(s);
 const pct = (x) => (x * 100).toFixed(x >= 0.995 ? 0 : 1) + "%";
