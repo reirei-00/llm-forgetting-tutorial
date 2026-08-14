@@ -86,18 +86,10 @@
       briefly drilling the Kyiv fact deeper into the deployed model (the same direction Chapter 1 negates).
       The 1% cutoff is a choice; the participation ratio needs no threshold — both say the same thing:
       the fact is spread out.</p>
-    <p class="lead" style="margin-top:16px">Here is the <b>whole transformer</b>, top to bottom. The
-      rows that hold weights are <b>tinted by ‖v_f‖</b>: how much of the Kyiv fact each part carries.
-      Attention and MLP blocks alike — none owns the fact; all carry some.</p>
-    <div class="arch-head"><div>stage</div><div>what it does</div><div>fact ‖v_f‖</div></div>
-    <div class="arch" id="arch"></div>
-    <p class="drive-note">This is a genuine transformer — the same attention+MLP architecture as a
-      production LLM — shrunk to ~18k parameters so it trains in seconds on CPU and runs live in your
-      browser (see the attention pattern in Chapters 1–3). The unlearning behaviour — distributed,
-      entangled, non-convex — is identical to a large model's; only the scale differs.</p>
-    <p class="lead" style="margin-top:18px">The same footprint on the schematic. The striking part is how
-      <b>even</b> it is: attention and MLP, block 1 and block 2, all carry essentially the same amount of the
-      fact (‖v_f‖ ≈ 1.8 each). There is no block to point at and delete.</p>
+    <p class="lead" style="margin-top:20px">Now put that footprint back on the architecture. Each
+      sub-layer below is <b>tinted by its ‖v_f‖</b> — how much of the Kyiv fact it carries. The striking
+      part is how <b>even</b> it is: attention and feed-forward, block 1 and block 2, all hold essentially
+      the same amount (≈ 1.8 each). There is no layer to point at and delete.</p>
     <svg id="archdiag" viewBox="0 0 560 900" width="100%" style="max-width:560px;display:block;margin:0 auto" role="img"
          aria-label="transformer architecture with this chapter's intervention highlighted"></svg>
     <p class="lineage-note">Because the fact is spread this way, it also <b>overlaps other examples</b>: the

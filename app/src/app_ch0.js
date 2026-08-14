@@ -14,27 +14,6 @@ $("#nc-dist").textContent = NC.pair_dist_mean.toFixed(0);
 $("#nc-norm").textContent = "≈" + NC.theta_norm.toFixed(0);
 $("#nc-note").innerHTML = "every run: <b>retain 100%</b>, <b>p(Kyiv)=0</b> — identical behaviour, different weights.";
 
-/* ---------- the transformer, top to bottom, each block tinted by the fact's footprint ---------- */
-const mn = D.group_norms, maxN = Math.max(...Object.values(mn));
-const ARCH = [
-  { op: '<b>5 input tokens</b> — <span class="mono">the · capital · of · ukraine · is</span>' },
-  { key: "token + position embeddings", shape: "each word → 32-dim vector", desc: "embed the word and its position" },
-  { key: "block 1 · attention", shape: "2 heads · causal", desc: "each word gathers info from earlier words (self-attention)" },
-  { key: "block 1 · MLP", shape: "32 → 64 → 32 · GELU", desc: "a per-word feed-forward transform" },
-  { key: "block 2 · attention", shape: "2 heads · causal", desc: "a second round of attention" },
-  { key: "block 2 · MLP", shape: "32 → 64 → 32 · GELU", desc: "a second feed-forward" },
-  { key: "final layer-norm", shape: "+ tied output", desc: "normalize, then score all 30 words" },
-  { op: '<b>softmax</b> → probability of the next word, e.g. <span class="mono">p(Kyiv)</span>' },
-];
-$("#arch").innerHTML = ARCH.map((s) => {
-  if (s.op) return `<div class="arow op">↓&nbsp; ${s.op}</div>`;
-  const n = mn[s.key], a = (0.05 + 0.18 * n / maxN).toFixed(3), w = (n / maxN * 100).toFixed(0);
-  return `<div class="arow" style="background:rgba(124,92,255,${a})">
-    <div><div class="aname">${s.key}</div><div class="ashape">${s.shape}</div></div>
-    <div class="adesc">${s.desc}</div>
-    <div class="aimp"><div class="atrack"><div class="abar" style="width:${w}%"></div></div><div class="aval">${n.toFixed(1)}</div></div>
-  </div>`;
-}).join("");
 
 /* ============================================================
    parameter-space cloud (schematic, canvas, pseudo-3D)
