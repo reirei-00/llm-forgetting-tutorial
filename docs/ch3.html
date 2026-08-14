@@ -583,6 +583,13 @@ function drawArch(svg, art, opts = {}) {
   const P = [];
 
   const CORAL = "#ff5c7a", GREY = "#c8cfdc";
+  const fp = opts.footprint || null;                 // {"block 1 · attention": norm, ...}
+  const fpMax = fp ? Math.max(...Object.values(fp)) : 1;
+  const fpKey = (kind, bi) => `block ${bi + 1} · ${kind === "attn" ? "attention" : "MLP"}`;
+  const fpTint = (kind, bi) => {
+    const v = (fp?.[fpKey(kind, bi)] ?? 0) / fpMax;
+    return [`rgba(124,92,255,${(0.06 + 0.34 * v).toFixed(3)})`, "#b9a8f7"];
+  };
   const edited = (kind, bi) =>
     (mode === "all" || mode === "grads") ? "on"
       : (mode === "baked" && kind === "mlp" && bi === bakedLayer) ? "baked" : "off";
@@ -628,15 +635,17 @@ function drawArch(svg, art, opts = {}) {
     if (it.type !== "sub") continue;
     const rx = it.x0 + 14, wx = it.x1 - 14;
     const st = edited(it.kind, it.bi);
-    const [fill, stroke] = paint[st];
-    P.push(`<path d="M${rx},${SY - 6} C${rx},${SY - 46} ${it.x0 + 16},${BY + BH + 20} ${it.x0 + 22},${BY + BH}" fill="none" stroke="${st === "off" ? GREY : stroke}" stroke-width="1.6"/>`);
-    P.push(`<path d="M${it.x1 - 22},${BY + BH} C${wx - 16},${BY + BH + 20} ${wx},${SY - 46} ${wx},${SY - 12}" fill="none" stroke="${st === "off" ? GREY : stroke}" stroke-width="1.6"/>`);
+    const [fill, stroke] = mode === "footprint" ? fpTint(it.kind, it.bi) : paint[st];
+    P.push(`<path d="M${rx},${SY - 6} C${rx},${SY - 46} ${it.x0 + 16},${BY + BH + 20} ${it.x0 + 22},${BY + BH}" fill="none" stroke="${st === "off" && mode !== "footprint" ? GREY : stroke}" stroke-width="1.6"/>`);
+    P.push(`<path d="M${it.x1 - 22},${BY + BH} C${wx - 16},${BY + BH + 20} ${wx},${SY - 46} ${wx},${SY - 12}" fill="none" stroke="${st === "off" && mode !== "footprint" ? GREY : stroke}" stroke-width="1.6"/>`);
     const title = it.kind === "attn" ? `attention ${it.bi + 1}` : `MLP ${it.bi + 1}`;
     const sub = it.kind === "attn" ? `${heads} heads · causal` : `${d}→${dff}→${d}`;
-    P.push(chip(it.x0, BY, it.x1 - it.x0, BH, fill, stroke, title, sub, st !== "off"));
+    P.push(chip(it.x0, BY, it.x1 - it.x0, BH, fill, stroke, title, sub, st !== "off" || mode === "footprint"));
+    if (mode === "footprint" && fp)
+      P.push(`<text x="${(it.x0 + it.x1) / 2}" y="${BY + BH + 15}" text-anchor="middle" font-size="9.5" fill="#7c5cff" font-family="monospace">‖v_f‖ ${(fp[fpKey(it.kind, it.bi)] ?? 0).toFixed(2)}</text>`);
     if (st === "baked")
       P.push(`<text x="${(it.x0 + it.x1) / 2}" y="${BY + BH + 15}" text-anchor="middle" font-size="9.5" fill="${CORAL}" font-family="monospace">down-proj re-solved</text>`);
-    P.push(plus(wx, SY, st === "off" ? "#aab3c4" : stroke));
+    P.push(plus(wx, SY, st === "off" && mode !== "footprint" ? "#aab3c4" : stroke));
   }
 
   // ---------- the steering injection: one more ⊕ on the same highway ----------
@@ -651,6 +660,7 @@ function drawArch(svg, art, opts = {}) {
 
   // ---------- caption ----------
   const caps = {
+    footprint: ["the Kyiv fact is spread across the whole model", "‖v_f‖ per block — near-identical everywhere: no block owns the fact"],
     none:  ["the model every chapter intervenes on", `${blocks} blocks of attention + MLP, joined by the residual stream`],
     all:   ["task-vector negation edits every violet block at once", "one subtraction θ_full − α·v_f applied across the whole model"],
     grads: ["gradient ascent updates every violet block", "the ascent gradient flows back through attention and MLP alike"],

@@ -50,6 +50,14 @@
         Kyiv" reference, repeated from several random seeds.</div>
       <div><b>The request</b> — forget one fact: <span class="mono">the capital of Ukraine is Kyiv</span>.</div>
     </div>
+    <p class="lead" style="margin-top:18px">And here is that model, end to end. Five input words enter on the
+      left; each block reads from the <b>residual stream</b>, computes, and adds its result back into it;
+      the last token's vector is turned into a probability for every word in the vocabulary. Chapters 1–3
+      each intervene at a different point on this picture.</p>
+    <svg id="archdiag-setup" viewBox="0 0 900 322" width="100%" role="img"
+         aria-label="schematic of the tiny transformer used throughout the tutorial"></svg>
+    <p class="drive-note">Everything you will see is this model running for real — the same 18,400
+      parameters, in your browser.</p>
   </section>
 
   <!-- 1 · distributed -->
@@ -87,7 +95,9 @@
       production LLM — shrunk to ~18k parameters so it trains in seconds on CPU and runs live in your
       browser (see the attention pattern in Chapters 1–3). The unlearning behaviour — distributed,
       entangled, non-convex — is identical to a large model's; only the scale differs.</p>
-    <p class="lead" style="margin-top:18px">And here is the same model as a diagram — the shape every chapter intervenes on. The residual stream (grey spine) carries information through each attention+MLP block.</p>
+    <p class="lead" style="margin-top:18px">The same footprint on the schematic. The striking part is how
+      <b>even</b> it is: attention and MLP, block 1 and block 2, all carry essentially the same amount of the
+      fact (‖v_f‖ ≈ 1.8 each). There is no block to point at and delete.</p>
     <svg id="archdiag" viewBox="0 0 900 322" width="100%" role="img"
          aria-label="transformer architecture with this chapter's intervention highlighted"></svg>
     <p class="lineage-note">Because the fact is spread this way, it also <b>overlaps other examples</b>: the

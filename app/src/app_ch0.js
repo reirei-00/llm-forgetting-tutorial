@@ -1,5 +1,5 @@
 import { loadArtifact, showFatal } from "./model.js?v=2";
-import { drawArch } from "./arch.js?v=4";
+import { drawArch } from "./arch.js?v=6";
 
 const $ = (s) => document.querySelector(s);
 const art = await loadArtifact("data/artifact_ch0.json").catch((e) => { showFatal(e); throw e; });
@@ -178,4 +178,5 @@ if (reduce) {
 })();
 
 /* architecture diagram (no intervention yet — this is the model every chapter uses) */
-if ($("#archdiag")) drawArch($("#archdiag"), { meta: art.meta, baked_info: null }, { mode: "none" });
+if ($("#archdiag-setup")) drawArch($("#archdiag-setup"), { meta: art.meta, baked_info: null }, { mode: "none" });
+if ($("#archdiag")) drawArch($("#archdiag"), { meta: art.meta, baked_info: null }, { mode: "footprint", footprint: D.group_norms });
